@@ -74,10 +74,29 @@ class SelectorBIC(ModelSelector):
 
         :return: GaussianHMM object
         """
-        warnings.filterwarnings("ignore", category=DeprecationWarning)
+        #warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        # TODO implement model selection based on BIC scores
-        raise NotImplementedError
+        #p = # Number of parameters
+     
+
+        n = self.min_n_components
+        lowest_BIC = float('inf')
+        best_n = n
+
+        while n <= self.max_n_components:
+            model = self.base_model(n)
+            logL = model.score(self.X, self.lengths)
+            print(logL)
+            p = model.transmat_.size + model.means_.size + model.covars_.size
+            print(p)
+            print(math.log(n))
+            BIC = -2 * logL + p * math.log(n)
+            if BIC < lowest_BIC:
+                lowest_BIC = BIC
+                best_n = n
+            n += 1
+
+        return self.base_model(best_n)
 
 
 class SelectorDIC(ModelSelector):
