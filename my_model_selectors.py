@@ -74,27 +74,22 @@ class SelectorBIC(ModelSelector):
 
         :return: GaussianHMM object
         """
-        #warnings.filterwarnings("ignore", category=DeprecationWarning)
+        warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        #p = # Number of parameters
-     
-
-        n = self.min_n_components
         lowest_BIC = float('inf')
-        best_n = n
+        best_n = self.min_n_components
 
-        while n <= self.max_n_components:
-            model = self.base_model(n)
-            logL = model.score(self.X, self.lengths)
-            print(logL)
-            p = model.transmat_.size + model.means_.size + model.covars_.size
-            print(p)
-            print(math.log(n))
-            BIC = -2 * logL + p * math.log(n)
-            if BIC < lowest_BIC:
-                lowest_BIC = BIC
-                best_n = n
-            n += 1
+        for n in range(self.min_n_components, self.max_n_components+1):
+            try: 
+                model = self.base_model(n)
+                score = model.score(self.X, self.lengths)
+                p = model.transmat_.size + model.means_.size + model.covars_.size
+                BIC = -2 * score + p * math.log(n)
+                if BIC < lowest_BIC:
+                    lowest_BIC = BIC
+                    best_n = n
+            except:
+                continue
 
         return self.base_model(best_n)
 
@@ -112,8 +107,28 @@ class SelectorDIC(ModelSelector):
     def select(self):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        # TODO implement model selection based on DIC scores
-        raise NotImplementedError
+        other_words = list(self.words.keys())
+        other_words.remove(self.this_word)
+
+        highest_DIC = float('-inf')
+        best_n = self.min_n_components
+
+        for n in range(self.min_n_components, self.max_n_components+1):
+            try:
+                model = self.base_model(n)
+                score = model.score(self.X, self.lengths)
+                other_scores = []
+                for other_word in other_words:
+                    X, lengths = self.hwords[other_word]
+                    other_scores.append(model.score(X, lengths))
+                DIC = score - sum(other_scores)/(len(other_scores) - 1)
+                if DIC > highest_DIC:
+                    highest_DIC = DIC
+                    best_n = n
+            except:
+                continue
+
+        return self.base_model(best_n)
 
 
 class SelectorCV(ModelSelector):
@@ -122,7 +137,34 @@ class SelectorCV(ModelSelector):
     '''
 
     def select(self):
+        '''
+        You need to split the dataset in train and test sets (it will be more than 1 pair of sets- iterate them)
+        Use the training data to fit the model
+        Use the test data to get the score
+        Get the average score of all these scores <-- this will be the components score
+        Keep the number of components of the highest components score.
+        Return a model fitted over all the data with the best number of components
+        '''
+
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        # TODO implement model selection using CV
-        raise NotImplementedError
+        best_component_score = float('-inf')
+        best_n = self.min_n_components
+
+        for n in range(self.min_n_components, self.max_n_components+1):
+            try:                
+                split_method = KFold(n_splits = min(len(self.lengths), 3))
+                scores = []
+                for cv_train_idx, cv_test_idx in split_method.split(self.sequences):
+                    x_test, lengths_test = combine_sequences(cv_test_idx, self.sequences)
+                    x_train, lengths_train = combine_sequences(cv_train_idx, self.sequences)
+                    model = GaussianHMM(n_components = n, n_iter=1000).fit(x_train, lengths_train)
+                    scores.append(model.score(x_test, lengths_test))
+                component_score = sum(scores) / len(scores)
+                if component_score > best_component_score:
+                    best_component_score = component_score
+                    best_n = n
+            except:
+                continue
+
+        return self.base_model(best_n)
